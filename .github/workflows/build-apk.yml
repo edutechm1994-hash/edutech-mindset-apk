@@ -1,0 +1,57 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build Android APK
+        shell: bash
+        run: |
+          HOST="edutech-mindset.pages.dev"
+          mkdir -p www/assets
+          curl -fsSL "https://$HOST/index.html" -o www/index.html
+          curl -fsSL "https://$HOST/manifest.json" -o www/manifest.json
+          curl -fsSL "https://$HOST/sw.js" -o www/sw.js
+          curl -fsSL "https://$HOST/assets/icon-512.png" -o www/assets/icon-512.png
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "dev.pages.edutechmindset",
+            "appName": "EduTech Mindset",
+            "webDir": "www"
+          }
+          EOF
+          npx cap add android
+          npx cap sync android
+          cd android
+          chmod +x gradlew && ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../EduTech-Mindset.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EduTech-Mindset-APK
+          path: EduTech-Mindset.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.83.0
+          files: EduTech-Mindset.apk
