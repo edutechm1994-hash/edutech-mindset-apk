@@ -1,4 +1,4 @@
-name: Build EduTech Mindset Pro APK v1.84.0
+name: Build EduTech Mindset Pro APK v1.85.0
 on:
   push:
     branches: [ main ]
@@ -192,7 +192,7 @@ jobs:
             color: #cbd5e1;
             z-index: 2;
           }
-          #edutech-studio-fab {
+          body { padding-bottom: 84px !important; } #edutech-header-local-btn { background: linear-gradient(135deg, #0284c7, #6366f1); color: #fff; border: none; border-radius: 999px; padding: 6px 12px; font-size: 0.78rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; } #edutech-studio-fab { display: none !important; } .unused-fab-old {
             position: fixed;
             bottom: 18px;
             left: 18px;
@@ -453,7 +453,7 @@ jobs:
               const fab = document.createElement('button');
               fab.id = 'edutech-studio-fab';
               fab.textContent = 'استوديو القاعدة المحلية';
-              document.body.appendChild(fab);
+              fab.id = 'edutech-header-local-btn'; (function placeHeaderBtn(){ var target = Array.from(document.querySelectorAll('button,a')).find(function(el){ return /\u0628\u0627\u0644\u0628\u0631\u064a\u062f|\u0628\u062d\u062b/.test(el.textContent||''); }); var box = target ? target.parentElement : document.querySelector('header, .header, nav'); if (box && !document.getElementById('edutech-header-local-btn')) { box.insertBefore(fab, target || box.firstChild); } else if (!document.getElementById('edutech-header-local-btn')) { setTimeout(placeHeaderBtn, 400); } })();
 
               const modal = document.createElement('div');
               modal.id = 'edutech-local-studio-modal';
@@ -552,7 +552,7 @@ jobs:
           {
             "appId": "dev.pages.edutechmindset",
             "appName": "EduTech Mindset Pro",
-            "webDir": "www",
+            "webDir": "www", "server": { "hostname": "apk.edutech-mindset.pages.dev", "androidScheme": "https" },
             "backgroundColor": "#070b14",
             "android": {
               "backgroundColor": "#070b14",
@@ -568,7 +568,7 @@ jobs:
           if [ ! -f package.json ]; then npm init -y; fi
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           rm -rf android
-          npx cap add android
+          node -e 'const fs=require("fs");const js=`(function(){try{var origFetch=window.fetch;window.fetch=function(u,o){if(typeof u==="string"&&u.startsWith("/api/"))u="https://edutech-mindset.pages.dev"+u;return origFetch.call(this,u,o)};var keys=["edu_hybrid_col_presentations","edu_hybrid_col_worksheets","edu_hybrid_col_lessonplans","edu_hybrid_col_designs","edu_hybrid_col_games","edu_hybrid_col_classrooms","edu_hybrid_col_exams"];keys.forEach(function(k,idx){try{var arr=JSON.parse(localStorage.getItem(k)||"[]");if(!Array.isArray(arr)||!arr.some(function(x){return x&&(x.userId==="local_workspace"||x.uid==="local_workspace"||x.workspaceId==="local_workspace")})){arr=Array.isArray(arr)?arr:[];arr.unshift({id:"lw_"+idx+"_1",userId:"local_workspace",uid:"local_workspace",ownerId:"local_workspace",workspaceId:"local_workspace",title:"\u0646\u0645\u0648\u0630\u062c \u062c\u0627\u0647\u0632 "+(idx+1),createdAt:Date.now(),updatedAt:Date.now()});localStorage.setItem(k,JSON.stringify(arr))}}catch(e){}});if(typeof window.SpeechSynthesisUtterance==="undefined"){window.SpeechSynthesisUtterance=function(t){this.text=t||"";this.lang="ar-SA";this.rate=1;this.pitch=1}}if(!window.speechSynthesis||window.AndroidNativeTTS){var nativeTTS=window.AndroidNativeTTS;var synth={speaking:false,pending:false,paused:false,getVoices:function(){return[{name:"Android Arabic TTS",lang:"ar-SA",localService:true,default:true}]},speak:function(u){var txt=typeof u==="string"?u:(u&&u.text)||"";if(nativeTTS&&nativeTTS.speak){this.speaking=true;nativeTTS.speak(txt,u&&u.rate||1,u&&u.pitch||1);setTimeout(function(){synth.speaking=false;if(u&&u.onend)u.onend()},600)}},cancel:function(){this.speaking=false;if(nativeTTS&&nativeTTS.stop)nativeTTS.stop()},pause:function(){this.paused=true},resume:function(){this.paused=false}};if(nativeTTS)window.speechSynthesis=synth}function openSmartAuth(mode){if(document.getElementById("v185-auth-modal"))return;var m=document.createElement("div");m.id="v185-auth-modal";m.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(7,11,20,0.85);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl";m.innerHTML="<div style=\"background:#0f172a;border:1px solid #334155;border-radius:16px;padding:20px;max-width:360px;width:100%;color:#fff;font-family:sans-serif\"><h3 style=\"margin:0 0 12px\">\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0627\u0644\u0630\u0643\u064a</h3><input id=\"v185-em\" placeholder=\"Gmail / \u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\" style=\"width:100%;padding:10px;margin-bottom:8px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#fff\"><input id=\"v185-pw\" type=\"password\" placeholder=\"\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u0623\u0648 \u0631\u0645\u0632 \u0627\u0644\u0625\u062f\u0627\u0631\u0629\" style=\"width:100%;padding:10px;margin-bottom:12px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#fff\"><div style=\"display:flex;gap:8px\"><button id=\"v185-go\" style=\"flex:1;padding:10px;border:none;border-radius:8px;background:#0284c7;color:#fff;font-weight:700\">\u062f\u062e\u0648\u0644</button><button id=\"v185-cl\" style=\"padding:10px;border:none;border-radius:8px;background:#334155;color:#fff\">\u0625\u063a\u0644\u0627\u0642</button></div></div>";document.body.appendChild(m);document.getElementById("v185-cl").onclick=function(){m.remove()};document.getElementById("v185-go").onclick=function(){var em=(document.getElementById("v185-em").value||"teacher@gmail.com").trim();var u={uid:"local_workspace",id:"local_workspace",email:em,displayName:em.split("@")[0],role:"admin",active:true};localStorage.setItem("edu_user",JSON.stringify(u));localStorage.setItem("edu_hybrid_user",JSON.stringify(u));if(window.Cloud){window.Cloud.user=u;if(typeof window.Cloud.onAuth==="function")window.Cloud.onAuth(u)}m.remove();window.dispatchEvent(new Event("storage"))}}setInterval(function(){if(window.Cloud){window.Cloud.signIn=function(){openSmartAuth("google")};window.Cloud.signInEmail=function(){openSmartAuth("email")}}},800)}catch(e){}})();`;fs.mkdirSync("www/js",{recursive:true});fs.writeFileSync("www/js/v185-fixes.js",js);if(fs.existsSync("www/index.html")){let h=fs.readFileSync("www/index.html","utf8");if(!h.includes("v185-fixes.js"))h=h.replace("</body>","<script src=\"js/v185-fixes.js\"></script></body>");fs.writeFileSync("www/index.html",h)}if(fs.existsSync("www/js/cloud.js")){let c=fs.readFileSync("www/js/cloud.js","utf8");c=c.replace(/([a-zA-Z0-9_$.]+)===\s*([a-zA-Z0-9_$.]+\.uid)/g,"($1===$2||$1===\"local_workspace\")");fs.writeFileSync("www/js/cloud.js",c)}' && npx cap add android
 
           python3 -m pip install --quiet pillow
           python3 << 'EOF'
@@ -628,10 +628,10 @@ jobs:
           import android.os.Bundle;
           import android.view.View;
           import android.view.WindowManager;
-          import android.webkit.WebSettings;
+          import android.webkit.WebSettings; import android.Manifest; import android.content.pm.PackageManager; import android.os.Build; import android.speech.tts.TextToSpeech; import android.webkit.CookieManager; import android.webkit.JavascriptInterface; import android.webkit.PermissionRequest; import android.webkit.WebChromeClient; import android.webkit.WebView; import androidx.core.app.ActivityCompat; import androidx.core.content.ContextCompat; import java.util.Locale;
           import com.getcapacitor.BridgeActivity;
 
-          public class MainActivity extends BridgeActivity {{
+          public class MainActivity extends BridgeActivity {{ private TextToSpeech tts; private boolean ttsReady = false;
               @Override
               public void onCreate(Bundle savedInstanceState) {{
                   super.onCreate(savedInstanceState);
@@ -650,7 +650,7 @@ jobs:
                       ws.setJavaScriptEnabled(true);
                       ws.setAllowFileAccess(true);
                       ws.setAllowContentAccess(true);
-                      this.bridge.getWebView().setBackgroundColor(Color.parseColor("#070b14"));
+                      WebView wv = this.bridge.getWebView(); wv.setBackgroundColor(Color.parseColor("#070b14")); String ua = ws.getUserAgentString(); if (ua != null) {{ ws.setUserAgentString(ua.replace("; wv)", ")").replace(" wv ", " ")); }} CookieManager.getInstance().setAcceptCookie(true); CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true); tts = new TextToSpeech(this, status -> {{ if (status == TextToSpeech.SUCCESS) {{ int res = tts.setLanguage(new Locale("ar")); ttsReady = (res != TextToSpeech.LANG_MISSING_DATA && res != TextToSpeech.LANG_NOT_SUPPORTED); if (!ttsReady) {{ tts.setLanguage(Locale.getDefault()); ttsReady = true; }} }} }}); wv.addJavascriptInterface(new Object() {{ @JavascriptInterface public boolean isReady() {{ return tts != null && ttsReady; }} @JavascriptInterface public void speak(String text, float rate, float pitch) {{ if (tts != null) {{ tts.setSpeechRate(rate > 0 ? rate : 1.0f); tts.setPitch(pitch > 0 ? pitch : 1.0f); tts.speak(text != null ? text : "", TextToSpeech.QUEUE_FLUSH, null, "edutech_tts"); }} }} @JavascriptInterface public void stop() {{ if (tts != null) tts.stop(); }} }}, "AndroidNativeTTS"); wv.setWebChromeClient(new WebChromeClient() {{ @Override public void onPermissionRequest(final PermissionRequest request) {{ runOnUiThread(() -> request.grant(request.getResources())); }} }}); java.util.List<String> perms = new java.util.ArrayList<>(); if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) perms.add(Manifest.permission.CAMERA); if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) perms.add(Manifest.permission.RECORD_AUDIO); if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, "android.permission.READ_MEDIA_IMAGES") != PackageManager.PERMISSION_GRANTED) perms.add("android.permission.READ_MEDIA_IMAGES"); if (!perms.isEmpty()) {{ ActivityCompat.requestPermissions(this, perms.toArray(new String[0]), 1001); }}
                   }}
               }}
           }}
@@ -666,19 +666,19 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../EduTech-Mindset-Pro-v184.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../EduTech-Mindset-Pro-v185.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EduTech-Mindset-Pro-v184
-          path: EduTech-Mindset-Pro-v184.apk
+          name: EduTech-Mindset-Pro-v185
+          path: EduTech-Mindset-Pro-v185.apk
 
-      - name: Publish GitHub Release v1.84.0
+      - name: Publish GitHub Release v1.85.0
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.84.0
-          name: EduTech Mindset Pro v1.84.0
-          files: EduTech-Mindset-Pro-v184.apk
+          tag_name: v1.85.0
+          name: EduTech Mindset Pro v1.85.0
+          files: EduTech-Mindset-Pro-v185.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
