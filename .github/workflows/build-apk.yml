@@ -1,7 +1,7 @@
-name: Build APK
-
+name: Build EduTech Mindset Pro APK v1.84.0
 on:
   push:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -22,36 +22,663 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build Android APK
-        shell: bash
+      - name: Download platform files from edutech-mindset.pages.dev
         run: |
-          HOST="edutech-mindset.pages.dev"
-          mkdir -p www/assets
-          curl -fsSL "https://$HOST/index.html" -o www/index.html
-          curl -fsSL "https://$HOST/manifest.json" -o www/manifest.json
-          curl -fsSL "https://$HOST/sw.js" -o www/sw.js
-          curl -fsSL "https://$HOST/assets/icon-512.png" -o www/assets/icon-512.png
-          npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          HOST="https://edutech-mindset.pages.dev"
+          mkdir -p www/css www/assets www/js
+          for f in index.html privacy.html manifest.json sw.js firebase-config.js; do
+            curl -fsSL "$HOST/$f" -o "www/$f"
+          done
+          for f in css/style.css css/premium.css css/shell175.css; do
+            curl -fsSL "$HOST/$f" -o "www/$f"
+          done
+          for f in assets/logo.png assets/icon-192.png assets/icon-512.png assets/icon-maskable-512.png assets/feature-graphic.png assets/infographic.jpg assets/asset_2.jpeg; do
+            curl -fsSL "$HOST/$f" -o "www/$f"
+          done
+          node << 'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          const { execFileSync } = require('child_process');
+          const host = 'https://edutech-mindset.pages.dev';
+          const sw = fs.readFileSync('www/sw.js', 'utf8');
+          const html = fs.readFileSync('www/index.html', 'utf8');
+          const matches = (sw + '\n' + html).match(/(?:\/)?js\/[a-zA-Z0-9._\/-]+\.js/g) || [];
+          const files = [...new Set(matches.map(m => m.replace(/^\//, '')))];
+          console.log('Total JS files found:', files.length);
+          for (const f of files) {
+            const out = path.join('www', f);
+            fs.mkdirSync(path.dirname(out), { recursive: true });
+            execFileSync('curl', ['-fsSL', `${host}/${f}`, '-o', out], { stdio: 'inherit' });
+          }
+          EOF
+
+      - name: Generate Pro Motion CSS & Local IndexedDB Engine
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+
+          const proCss = `
+          html, body {
+            background-color: #070b14 !important;
+            min-height: 100vh;
+            overflow-x: hidden;
+          }
+          @keyframes edutechFadeUp {
+            from { opacity: 0; transform: translateY(18px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          .card, section, .panel, [class*="card"] {
+            animation: edutechFadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+          }
+          .card:active, [class*="card"]:active {
+            transform: scale(0.985);
+          }
+          #edutech-pro-splash {
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            background: radial-gradient(circle at 50% 42%, #132247 0%, #070b14 78%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            transition: transform 0.75s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.65s ease;
+          }
+          #edutech-pro-splash.zoom-exit {
+            transform: scale(1.24);
+            opacity: 0;
+            pointer-events: none;
+          }
+          #pro-particles-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+          }
+          .pro-orbit-stage {
+            position: relative;
+            width: 190px;
+            height: 190px;
+            perspective: 900px;
+            transform-style: preserve-3d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+          }
+          .pro-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            pointer-events: none;
+          }
+          .pro-ring-1 {
+            width: 175px;
+            height: 175px;
+            border-top-color: #38bdf8;
+            border-bottom-color: #818cf8;
+            animation: proSpin3d1 3.4s linear infinite;
+          }
+          .pro-ring-2 {
+            width: 148px;
+            height: 148px;
+            border-left-color: #22d3ee;
+            border-right-color: #a855f7;
+            animation: proSpin3d2 2.7s linear infinite;
+          }
+          .pro-ring-3 {
+            width: 122px;
+            height: 122px;
+            border-top-color: #34d399;
+            animation: proSpin3d3 2.1s linear infinite;
+          }
+          @keyframes proSpin3d1 {
+            0% { transform: rotateX(62deg) rotateY(15deg) rotateZ(0deg); }
+            100% { transform: rotateX(62deg) rotateY(15deg) rotateZ(360deg); }
+          }
+          @keyframes proSpin3d2 {
+            0% { transform: rotateX(-55deg) rotateY(35deg) rotateZ(0deg); }
+            100% { transform: rotateX(-55deg) rotateY(35deg) rotateZ(-360deg); }
+          }
+          @keyframes proSpin3d3 {
+            0% { transform: rotateY(65deg) rotateZ(0deg); }
+            100% { transform: rotateY(65deg) rotateZ(360deg); }
+          }
+          .pro-splash-logo {
+            width: 84px;
+            height: 84px;
+            border-radius: 22px;
+            object-fit: cover;
+            box-shadow: 0 0 32px rgba(56, 189, 248, 0.45);
+            z-index: 2;
+          }
+          .pro-splash-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            margin-bottom: 6px;
+            z-index: 2;
+            background: linear-gradient(90deg, #38bdf8, #a78bfa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+          }
+          .pro-splash-sub {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 18px;
+            z-index: 2;
+          }
+          .pro-progress-wrap {
+            width: min(280px, 76vw);
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 999px;
+            overflow: hidden;
+            z-index: 2;
+          }
+          #pro-progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #38bdf8, #818cf8, #34d399);
+            transition: width 0.2s ease;
+          }
+          #pro-progress-text {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            z-index: 2;
+          }
+          #edutech-studio-fab {
+            position: fixed;
+            bottom: 18px;
+            left: 18px;
+            z-index: 99990;
+            background: linear-gradient(135deg, #0284c7, #6366f1);
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            box-shadow: 0 8px 24px rgba(2, 132, 199, 0.45);
+            cursor: pointer;
+          }
+          #edutech-local-studio-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 99998;
+            background: rgba(7, 11, 20, 0.94);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            color: #f1f5f9;
+            direction: rtl;
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 16px;
+          }
+          #edutech-local-studio-modal.open {
+            display: flex;
+          }
+          .studio-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+          }
+          .studio-close {
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-weight: 700;
+            cursor: pointer;
+          }
+          .studio-search {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #fff;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+          }
+          .studio-tabs {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            margin-bottom: 12px;
+          }
+          .studio-tab {
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 12px;
+            white-space: nowrap;
+            cursor: pointer;
+          }
+          .studio-tab.active {
+            background: #0284c7;
+            color: #fff;
+            border-color: #38bdf8;
+          }
+          .studio-list {
+            flex: 1;
+            overflow-y: auto;
+            display: grid;
+            gap: 10px;
+            align-content: start;
+          }
+          .studio-item {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            padding: 12px;
+          }
+          .studio-opt {
+            display: block;
+            width: 100%;
+            text-align: right;
+            margin-top: 6px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #1e293b;
+            color: #f8fafc;
+            cursor: pointer;
+          }
+          .studio-opt.correct { background: #14532d; border-color: #22c55e; }
+          .studio-opt.wrong { background: #7f1d1d; border-color: #ef4444; }
+          `;
+          fs.writeFileSync('www/css/pro-motion.css', proCss.trim() + '\n');
+
+          const proJs = `
+          (function () {
+            const DB_NAME = 'EduTechMindsetProDB';
+            const DB_VER = 1;
+            const SEED = {
+              summaries: [
+                { id: 's1', subject: 'الرياضيات - توجيهي علمي', title: 'التفاضل والتكامل ومعدل التغير', content: 'قواعد الاشتقاق الأساسية، قاعدة السلسلة، القيم القصوى، والتكامل المحدود وغير المحدود وفق المنهاج الفلسطيني.' },
+                { id: 's2', subject: 'الفيزياء - توجيهي', title: 'الزخم الخطي والدفع والحركة الدورانية', content: 'قانون حفظ الزخم الخطي، التصادمات المرنة وغير المرنة، العزم والقصور الذاتي.' },
+                { id: 's3', subject: 'الكيمياء - توجيهي', title: 'الحموض والقواعد والاتزان الأيوني', content: 'مفهوم برونستد-لوري ولويس، الرقم الهيدروجيني pH، والمحاليل المنظمة.' },
+                { id: 's4', subject: 'اللغة العربية - توجيهي', title: 'البلاغة والعروض والنصوص الأدبية', content: 'علم البيان والبديع والمعاني، البحور الشعرية المقررة، وتحليل النصوص.' },
+                { id: 's5', subject: 'التكنولوجيا - توجيهي', title: 'قواعد البيانات والشبكات والبرمجة', content: 'تصميم الجداول والعلاقات SQL، طبقات نموذج OSI، وبناء تطبيقات الويب.' }
+              ],
+              questions: [
+                { id: 'q1', subject: 'الرياضيات', q: 'ما مشتقة الدالة f(x) = x^3 + 2x عند x = 1؟', options: ['3', '5', '6', '2'], answer: 1 },
+                { id: 'q2', subject: 'الفيزياء', q: 'وحدة قياس الزخم الخطي في النظام الدولي هي:', options: ['kg.m/s', 'N.s^2', 'Joule', 'Watt'], answer: 0 },
+                { id: 'q3', subject: 'الكيمياء', q: 'قيمة pH للمحلول المتعادل عند 25 درجة مئوية تساوي:', options: ['0', '14', '7', '1'], answer: 2 },
+                { id: 'q4', subject: 'التكنولوجيا', q: 'أي لغة تُستخدم للاستعلام في قواعد البيانات العلائقية؟', options: ['HTML', 'SQL', 'CSS', 'XML'], answer: 1 }
+              ],
+              flashcards: [
+                { id: 'f1', subject: 'الفيزياء', front: 'قانون نيوتن الثاني بصيغة الزخم', back: 'محصلة القوى تساوي المعدل الزمني للتغير في الزخم الخطي: F = Δp / Δt' },
+                { id: 'f2', subject: 'الرياضيات', front: 'المشتقة الأولى للدالة الأسية e^x', back: 'تساوي نفس الدالة e^x' },
+                { id: 'f3', subject: 'الكيمياء', front: 'تعريف الحمض عند برونستد-لوري', back: 'مادة قادرة على منح بروتون (H+) لمادة أخرى' },
+                { id: 'f4', subject: 'اللغة الإنجليزية', front: 'Present Perfect Continuous Form', back: 'Subject + has/have + been + Verb-ing' }
+              ],
+              teacher_plans: [
+                { id: 't1', subject: 'خطة معلم - توجيهي', title: 'خطة تدريس وحدة التفاضل (4 أسابيع)', content: 'الأسبوع 1: متوسط التغير والمشتقة الأولى. الأسبوع 2: قواعد الاشتقاق. الأسبوع 3: تطبيقات هندسية وفيزيائية. الأسبوع 4: تقويم ختامي.' },
+                { id: 't2', subject: 'خطة معلم - التكنولوجيا', title: 'خطة مشروع قاعدة بيانات مدرسية', content: 'تحليل النظام، رسم ERD، بناء الجداول في SQLite/IndexedDB، وربط الواجهة التفاعلية.' }
+              ]
+            };
+
+            function openDB() {
+              return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VER);
+                req.onupgradeneeded = (e) => {
+                  const db = e.target.result;
+                  ['summaries', 'questions', 'flashcards', 'teacher_plans'].forEach(store => {
+                    if (!db.objectStoreNames.contains(store)) {
+                      db.createObjectStore(store, { keyPath: 'id' });
+                    }
+                  });
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+              });
+            }
+
+            async function seedDB(db) {
+              for (const storeName of Object.keys(SEED)) {
+                await new Promise((res) => {
+                  const tx = db.transaction(storeName, 'readwrite');
+                  const st = tx.objectStore(storeName);
+                  const countReq = st.count();
+                  countReq.onsuccess = () => {
+                    if (countReq.result === 0) {
+                      SEED[storeName].forEach(item => st.put(item));
+                    }
+                  };
+                  tx.oncomplete = () => res();
+                  tx.onerror = () => res();
+                });
+              }
+            }
+
+            async function getAll(db, storeName) {
+              return new Promise((res) => {
+                const tx = db.transaction(storeName, 'readonly');
+                const req = tx.objectStore(storeName).getAll();
+                req.onsuccess = () => res(req.result || []);
+                req.onerror = () => res([]);
+              });
+            }
+
+            function initParticles(canvas) {
+              const ctx = canvas.getContext('2d');
+              let w = canvas.width = window.innerWidth;
+              let h = canvas.height = window.innerHeight;
+              const pts = Array.from({ length: 55 }, () => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                vx: (Math.random() - 0.5) * 0.9,
+                vy: (Math.random() - 0.5) * 0.9,
+                r: Math.random() * 2.2 + 0.8
+              }));
+              let active = true;
+              function draw() {
+                if (!active) return;
+                ctx.clearRect(0, 0, w, h);
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
+                for (const p of pts) {
+                  p.x += p.vx; p.y += p.vy;
+                  if (p.x < 0 || p.x > w) p.vx *= -1;
+                  if (p.y < 0 || p.y > h) p.vy *= -1;
+                  ctx.beginPath();
+                  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+                requestAnimationFrame(draw);
+              }
+              draw();
+              return () => { active = false; };
+            }
+
+            async function boot() {
+              const splash = document.createElement('div');
+              splash.id = 'edutech-pro-splash';
+              splash.innerHTML =
+                '<canvas id="pro-particles-canvas"></canvas>' +
+                '<div class="pro-orbit-stage">' +
+                  '<div class="pro-ring pro-ring-1"></div>' +
+                  '<div class="pro-ring pro-ring-2"></div>' +
+                  '<div class="pro-ring pro-ring-3"></div>' +
+                  '<img class="pro-splash-logo" src="assets/logo.png" onerror="this.src=\\'assets/icon-512.png\\'" alt="EduTech">' +
+                '</div>' +
+                '<div class="pro-splash-title">EduTech Mindset Pro v1.84</div>' +
+                '<div class="pro-splash-sub">جاري تهيئة القاعدة المحلية والمنهاج الفلسطيني...</div>' +
+                '<div class="pro-progress-wrap"><div id="pro-progress-bar"></div></div>' +
+                '<div id="pro-progress-text">0%</div>';
+              document.body.appendChild(splash);
+
+              const stopParticles = initParticles(document.getElementById('pro-particles-canvas'));
+              const bar = document.getElementById('pro-progress-bar');
+              const txt = document.getElementById('pro-progress-text');
+
+              let pct = 10;
+              const setProg = (v) => {
+                pct = v;
+                bar.style.width = v + '%';
+                txt.textContent = v + '%';
+              };
+
+              let db = null;
+              try {
+                setProg(35);
+                db = await openDB();
+                setProg(65);
+                await seedDB(db);
+                setProg(95);
+              } catch (err) {
+                console.warn('IndexedDB init warning:', err);
+              }
+
+              setTimeout(() => {
+                setProg(100);
+                setTimeout(() => {
+                  splash.classList.add('zoom-exit');
+                  setTimeout(() => {
+                    stopParticles();
+                    splash.remove();
+                  }, 750);
+                }, 250);
+              }, 700);
+
+              const fab = document.createElement('button');
+              fab.id = 'edutech-studio-fab';
+              fab.textContent = 'استوديو القاعدة المحلية';
+              document.body.appendChild(fab);
+
+              const modal = document.createElement('div');
+              modal.id = 'edutech-local-studio-modal';
+              modal.innerHTML =
+                '<div class="studio-header">' +
+                  '<strong>استوديو القاعدة المحلية (أوفلاين)</strong>' +
+                  '<button class="studio-close" id="studio-close-btn">إغلاق</button>' +
+                '</div>' +
+                '<input class="studio-search" id="studio-search-input" type="search" placeholder="ابحث فوراً في الملخصات والأسئلة والبطاقات وخطط المعلم...">' +
+                '<div class="studio-tabs">' +
+                  '<button class="studio-tab active" data-tab="summaries">ملخصات المنهاج</button>' +
+                  '<button class="studio-tab" data-tab="questions">بنك الأسئلة</button>' +
+                  '<button class="studio-tab" data-tab="flashcards">بطاقات المراجعة</button>' +
+                  '<button class="studio-tab" data-tab="teacher_plans">خطط المعلم</button>' +
+                '</div>' +
+                '<div class="studio-list" id="studio-list"></div>';
+              document.body.appendChild(modal);
+
+              let currentTab = 'summaries';
+              async function renderList() {
+                const listEl = document.getElementById('studio-list');
+                const q = (document.getElementById('studio-search-input').value || '').trim().toLowerCase();
+                const items = db ? await getAll(db, currentTab) : SEED[currentTab];
+                const filtered = items.filter(it => JSON.stringify(it).toLowerCase().includes(q));
+                listEl.innerHTML = '';
+                if (!filtered.length) {
+                  listEl.innerHTML = '<div class="studio-item">لا توجد نتائج مطابقة.</div>';
+                  return;
+                }
+                filtered.forEach(item => {
+                  const card = document.createElement('div');
+                  card.className = 'studio-item';
+                  if (currentTab === 'questions') {
+                    card.innerHTML = '<div style="color:#38bdf8;font-size:0.8rem">' + item.subject + '</div><div style="margin:6px 0;font-weight:700">' + item.q + '</div>';
+                    item.options.forEach((opt, idx) => {
+                      const b = document.createElement('button');
+                      b.className = 'studio-opt';
+                      b.textContent = opt;
+                      b.onclick = () => {
+                        b.classList.add(idx === item.answer ? 'correct' : 'wrong');
+                      };
+                      card.appendChild(b);
+                    });
+                  } else if (currentTab === 'flashcards') {
+                    card.innerHTML = '<div style="color:#38bdf8;font-size:0.8rem">' + item.subject + '</div><div style="margin:6px 0;font-weight:700">' + item.front + '</div><div style="color:#94a3b8;font-size:0.85rem">(اضغط لإظهار الإجابة)</div>';
+                    let flipped = false;
+                    card.onclick = () => {
+                      flipped = !flipped;
+                      card.querySelector('div:last-child').textContent = flipped ? item.back : '(اضغط لإظهار الإجابة)';
+                      card.querySelector('div:last-child').style.color = flipped ? '#34d399' : '#94a3b8';
+                    };
+                  } else {
+                    card.innerHTML = '<div style="color:#38bdf8;font-size:0.8rem">' + item.subject + '</div><div style="margin:4px 0;font-weight:700">' + item.title + '</div><div style="color:#cbd5e1;font-size:0.9rem">' + item.content + '</div>';
+                  }
+                  listEl.appendChild(card);
+                });
+              }
+
+              fab.onclick = () => { modal.classList.add('open'); renderList(); };
+              document.getElementById('studio-close-btn').onclick = () => modal.classList.remove('open');
+              document.getElementById('studio-search-input').addEventListener('input', renderList);
+              modal.querySelectorAll('.studio-tab').forEach(btn => {
+                btn.onclick = () => {
+                  modal.querySelectorAll('.studio-tab').forEach(b => b.classList.remove('active'));
+                  btn.classList.add('active');
+                  currentTab = btn.getAttribute('data-tab');
+                  renderList();
+                };
+              });
+
+              window.EduTechProEngine = { openStudio: () => { modal.classList.add('open'); renderList(); } };
+            }
+
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', boot);
+            } else {
+              boot();
+            }
+          })();
+          `;
+          fs.writeFileSync('www/js/pro-local-engine.js', proJs.trim() + '\n');
+
+          let html = fs.readFileSync('www/index.html', 'utf8');
+          if (!html.includes('css/pro-motion.css')) {
+            html = html.replace(/<\/head>/i, '  <link rel="stylesheet" href="css/pro-motion.css">\n</head>');
+          }
+          if (!html.includes('js/pro-local-engine.js')) {
+            html = html.replace(/<\/body>/i, '  <script src="js/pro-local-engine.js"></script>\n</body>');
+          }
+          fs.writeFileSync('www/index.html', html);
+          EOF
+
+      - name: Setup Capacitor and Configure Android Project
+        run: |
           cat << 'EOF' > capacitor.config.json
           {
             "appId": "dev.pages.edutechmindset",
-            "appName": "EduTech Mindset",
-            "webDir": "www"
+            "appName": "EduTech Mindset Pro",
+            "webDir": "www",
+            "backgroundColor": "#070b14",
+            "android": {
+              "backgroundColor": "#070b14",
+              "allowMixedContent": true
+            },
+            "plugins": {
+              "SplashScreen": {
+                "launchShowDuration": 0
+              }
+            }
           }
           EOF
+          if [ ! -f package.json ]; then npm init -y; fi
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          rm -rf android
           npx cap add android
+
+          python3 -m pip install --quiet pillow
+          python3 << 'EOF'
+          from PIL import Image
+          import os
+          src = Image.open('www/assets/icon-512.png').convert('RGBA')
+          sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+          for d, sz in sizes.items():
+              folder = f'android/app/src/main/res/mipmap-{d}'
+              os.makedirs(folder, exist_ok=True)
+              resized = src.resize((sz, sz), Image.LANCZOS)
+              resized.save(f'{folder}/ic_launcher.png')
+              resized.save(f'{folder}/ic_launcher_round.png')
+              fg_sz = int(sz * 1.5)
+              fg = Image.new('RGBA', (fg_sz, fg_sz), (7, 11, 20, 0))
+              inner = src.resize((sz, sz), Image.LANCZOS)
+              off = (fg_sz - sz) // 2
+              fg.paste(inner, (off, off), inner)
+              fg.save(f'{folder}/ic_launcher_foreground.png')
+          bg_xml = 'android/app/src/main/res/values/ic_launcher_background.xml'
+          with open(bg_xml, 'w') as f:
+              f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_launcher_background">#070b14</color>\n</resources>\n')
+          EOF
+
+          cat << 'EOF' > android/app/src/main/res/values/styles.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+            <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+              <item name="colorPrimary">#070b14</item>
+              <item name="colorPrimaryDark">#070b14</item>
+              <item name="colorAccent">#38bdf8</item>
+            </style>
+            <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+              <item name="windowActionBar">false</item>
+              <item name="windowNoTitle">true</item>
+              <item name="android:windowFullscreen">true</item>
+              <item name="android:windowBackground">@android:color/black</item>
+              <item name="android:statusBarColor">#070b14</item>
+              <item name="android:navigationBarColor">#070b14</item>
+            </style>
+            <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+              <item name="android:background">#070b14</item>
+            </style>
+          </resources>
+          EOF
+
+          python3 << 'EOF'
+          import glob
+          ma_files = glob.glob('android/app/src/main/java/**/MainActivity.java', recursive=True)
+          for path in ma_files:
+              with open(path, 'r') as f:
+                  code = f.read()
+              pkg_line = [l for l in code.splitlines() if l.startswith('package ')][0]
+              new_code = f"""{pkg_line}
+
+          import android.graphics.Color;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.WebSettings;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {{
+              @Override
+              public void onCreate(Bundle savedInstanceState) {{
+                  super.onCreate(savedInstanceState);
+                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                  getWindow().getDecorView().setSystemUiVisibility(
+                      View.SYSTEM_UI_FLAG_FULLSCREEN |
+                      View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                      View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                      View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                  );
+                  if (this.bridge != null && this.bridge.getWebView() != null) {{
+                      WebSettings ws = this.bridge.getWebView().getSettings();
+                      ws.setDomStorageEnabled(true);
+                      ws.setDatabaseEnabled(true);
+                      ws.setJavaScriptEnabled(true);
+                      ws.setAllowFileAccess(true);
+                      ws.setAllowContentAccess(true);
+                      this.bridge.getWebView().setBackgroundColor(Color.parseColor("#070b14"));
+                  }}
+              }}
+          }}
+          """
+              with open(path, 'w') as f:
+                  f.write(new_code)
+          EOF
+
           npx cap sync android
+
+      - name: Build Debug APK
+        run: |
           cd android
-          chmod +x gradlew && ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../EduTech-Mindset.apk
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../EduTech-Mindset-Pro-v184.apk
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: EduTech-Mindset-APK
-          path: EduTech-Mindset.apk
+          name: EduTech-Mindset-Pro-v184
+          path: EduTech-Mindset-Pro-v184.apk
 
-      - uses: softprops/action-gh-release@v2
+      - name: Publish GitHub Release v1.84.0
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.83.0
-          files: EduTech-Mindset.apk
+          tag_name: v1.84.0
+          name: EduTech Mindset Pro v1.84.0
+          files: EduTech-Mindset-Pro-v184.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
