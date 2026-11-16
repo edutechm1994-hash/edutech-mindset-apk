@@ -1007,8 +1007,11 @@ jobs:
           - خمس شاشات سلسة بالحركات والانتقالات مع أزرار السابق والتالي.
           EOF
 
-          export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+                  RAW_EOF
+          bash build_all.sh
+      - name: Release APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           gh release delete v2.0.0 --yes 2>/dev/null || true
           gh release create v2.0.0 EduTech-Mindset-Native-v2.0.apk --title "EduTech Mindset Native v2.0.0" --notes-file release_notes.md
-          RAW_EOF
-          bash build_all.sh
