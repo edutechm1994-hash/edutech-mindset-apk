@@ -1,4 +1,4 @@
-name: Build Ultimate Android APK v3.0.0
+name: Build Ultimate Android APK v4.0.0
 
 on:
   push:
@@ -42,7 +42,12 @@ jobs:
         run: |
           mkdir -p app/src/main/assets/www/css app/src/main/assets/www/js app/src/main/assets/www/assets
           mkdir -p app/src/main/res/drawable app/src/main/res/mipmap-xxxhdpi app/src/main/res/values app/src/main/res/xml
-          node -e '
+         if [ -f "EduTech_Mindset_Cloudflare_Pages_153.zip" ]; then
+echo "Extracting EduTech_Mindset_Cloudflare_Pages_153.zip..."
+unzip -o EduTech_Mindset_Cloudflare_Pages_153.zip -d app/src/main/assets/www
+if [ ! -f "app/src/main/assets/www/index.html" ]; then SUB=$(find app/src/main/assets/www -maxdepth 2 -name "index.html" -print -quit); if [ -n "$SUB" ]; then cp -r "$(dirname "$SUB")"/* app/src/main/assets/www/; fi; fi
+fi
+ node -e '
           const fs = require("fs");
           const path = require("path");
           const https = require("https");
@@ -65,6 +70,7 @@ jobs:
           }
 
           async function downloadRel(rel) {
+if (fs.existsSync("EduTech_Mindset_Cloudflare_Pages_153.zip")) return false;
             const clean = rel.replace(/^\/+/, "").split("?")[0].split("#")[0];
             if (!clean || clean.startsWith("http") || clean.includes("..")) return false;
             const dest = path.join(WWW, clean);
@@ -163,8 +169,8 @@ jobs:
                   applicationId = "com.edutech.mindset.ultimate"
                   minSdk = 24
                   targetSdk = 34
-                  versionCode = 300
-                  versionName = "3.0.0"
+                  versionCode = 400
+                  versionName = "4.0.0"
               }
               buildTypes {
                   release {
@@ -295,7 +301,7 @@ jobs:
           import android.database.sqlite.SQLiteOpenHelper
 
           class EduTechDbHelper(context: Context) :
-              SQLiteOpenHelper(context, "edutech_mindset_ultimate.db", null, 1) {
+              SQLiteOpenHelper(context, "edutech_mindset_ultimate.db", null, 2) {
 
               override fun onCreate(db: SQLiteDatabase) {
                   db.execSQL(
@@ -319,6 +325,7 @@ jobs:
                           "display_name TEXT NOT NULL, " +
                           "updated_at INTEGER NOT NULL)"
                   )
+db.execSQL("CREATE TABLE IF NOT EXISTS user_files (id INTEGER PRIMARY KEY AUTOINCREMENT, user_email TEXT NOT NULL, file_name TEXT NOT NULL, file_type TEXT NOT NULL, local_path TEXT NOT NULL, extracted_text TEXT NOT NULL, created_at INTEGER NOT NULL)")
               }
 
               override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -388,6 +395,33 @@ jobs:
                       }
                   }
                   return null
+fun insertUserFile(userEmail: String, fileName: String, fileType: String, localPath: String, extractedText: String): Long {
+val cv = ContentValues().apply {
+put("user_email", userEmail)
+put("file_name", fileName)
+put("file_type", fileType)
+put("local_path", localPath)
+put("extracted_text", extractedText)
+put("created_at", System.currentTimeMillis())
+}
+return writableDatabase.insert("user_files", null, cv)
+}
+
+fun getUserFiles(userEmail: String): List<UserFileItem> {
+val list = mutableListOf<UserFileItem>()
+val cursor = readableDatabase.rawQuery("SELECT id, user_email, file_name, file_type, local_path, extracted_text, created_at FROM user_files WHERE user_email = ? ORDER BY created_at DESC", arrayOf(userEmail))
+cursor.use {
+while (it.moveToNext()) {
+list.add(UserFileItem(it.getLong(0), it.getString(1), it.getString(2), it.getString(3), it.getString(4), it.getString(5), it.getLong(6)))
+}
+}
+return list
+}
+
+fun deleteUserFile(id: Long) {
+writableDatabase.delete("user_files", "id = ?", arrayOf(id.toString()))
+}
+data class UserFileItem(val id: Long, val userEmail: String, val fileName: String, val fileType: String, val localPath: String, val extractedText: String, val createdAt: Long)
               }
           }
           EOF
@@ -821,6 +855,28 @@ jobs:
           import android.webkit.WebResourceResponse
           import android.webkit.WebSettings
           import android.webkit.WebView
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import android.provider.OpenableColumns
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.zip.ZipInputStream
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
+import org.json.JSONObject
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.Psychology
           import android.webkit.WebViewClient
           import android.widget.Toast
           import androidx.activity.ComponentActivity
@@ -990,6 +1046,7 @@ jobs:
 
               private fun saveAndInjectGoogleUser(email: String, name: String) {
                   dbHelper.saveGoogleUser(email, name)
+getSharedPreferences("edutech_user_prefs", Context.MODE_PRIVATE).edit().putString("current_user_email", email).putString("current_user_name", name).apply()
                   googleEmailState.value = email
                   googleNameState.value = name
                   injectGoogleUserIntoWebView(email, name)
@@ -1140,6 +1197,7 @@ jobs:
               @Composable
               private fun EduTechAppRoot() {
                   var showSplash by remember { mutableStateOf(true) }
+                  var showLibraryScreen by remember { mutableStateOf(false) }
                   var showControlSheet by remember { mutableStateOf(false) }
 
                   LaunchedEffect(Unit) {
@@ -1156,25 +1214,19 @@ jobs:
                                   contentColor = Color(0xFFD4AF37),
                                   tonalElevation = 8.dp
                               ) {
-                                  SleekNavItem(
-                                      icon = Icons.Filled.ArrowBack,
-                                      label = "السابق",
-                                      onClick = {
-                                          if (webViewRef?.canGoBack() == true) webViewRef?.goBack()
-                                      }
-                                  )
+                             
                                   SleekNavItem(
                                       icon = Icons.Filled.Home,
                                       label = "الرئيسية",
                                       onClick = {
-                                          webViewRef?.loadUrl("https://edutech-mindset.pages.dev/")
+                                       showLibraryScreen = false;    webViewRef?.loadUrl("https://edutech-mindset.pages.dev/")
                                       }
                                   )
                                   SleekNavItem(
-                                      icon = Icons.Filled.ArrowForward,
-                                      label = "التالي",
+                                      icon = Icons.Filled.MenuBook,
+                                      label = "مكتبتي والقارئ",,
                                       onClick = {
-                                          if (webViewRef?.canGoForward() == true) webViewRef?.goForward()
+                                          showLibraryScreen = true
                                       }
                                   )
                                   SleekNavItem(
@@ -1195,7 +1247,7 @@ jobs:
                                   .fillMaxSize()
                                   .padding(innerPadding)
                           ) {
-                              PlatformWebView()
+                              if (showLibraryScreen) { LibraryAndReaderScreen(onAskAi = { txt -> showLibraryScreen = false; webViewRef?.evaluateJavascript("window.dispatchEvent(new CustomEvent('edutech:askBook',{detail:{text:" + JSONObject.quote(txt) + "}}));", null); startFloatingAssistant() }) } else PlatformWebView()
                           }
                       }
 
@@ -1359,7 +1411,7 @@ jobs:
                           )
                           Spacer(modifier = Modifier.height(8.dp))
                           Text(
-                              text = "v3.0.0 Ultimate • 42 أداة ذكية أونلاين وأوفلاين",
+                              text = "v4.0.0 Ultimate • 42 أداة ذكية أونلاين وأوفلاين",
                               fontSize = 12.sp,
                               color = Color(0xFF94A3B8)
                           )
@@ -1373,6 +1425,7 @@ jobs:
                       }
                   }
               }
+@Composable fun LibraryAndReaderScreen(onAskAi: (String) -> Unit) { val ctx = androidx.compose.ui.platform.LocalContext.current; val email = (googleEmailState.value ?: "guest").ifBlank { "guest" }.replace(Regex("[^a-zA-Z0-9._-]"), "_"); val libDir = remember(email) { java.io.File(ctx.filesDir, "library/" + email).apply { if (!exists()) mkdirs() } }; var files by remember { mutableStateOf(libDir.listFiles()?.toList()?.sortedByDescending { it.lastModified() } ?: emptyList()) }; var selectedFile by remember { mutableStateOf<java.io.File?>(null) }; var pageIdx by remember { mutableStateOf(0) }; var pageCount by remember { mutableStateOf(0) }; var pdfBmp by remember { mutableStateOf<Bitmap?>(null) }; var textContent by remember { mutableStateOf("") }; val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) { val name = run { var n = "book_" + System.currentTimeMillis() + ".pdf"; ctx.contentResolver.query(uri, null, null, null, null)?.use { c -> val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (i >= 0 && c.moveToFirst()) n = c.getString(i) ?: n }; n }; val dest = java.io.File(libDir, name); ctx.contentResolver.openInputStream(uri)?.use { ins -> dest.outputStream().use { out -> ins.copyTo(out) } }; files = libDir.listFiles()?.toList()?.sortedByDescending { it.lastModified() } ?: emptyList() } }; LaunchedEffect(selectedFile, pageIdx) { val f = selectedFile; if (f == null) { pdfBmp = null; textContent = ""; pageCount = 0 } else if (f.name.endsWith(".pdf", true)) { val res = renderPdfPage(f, pageIdx); pdfBmp = res.first; pageCount = res.second; textContent = "" } else if (f.name.endsWith(".docx", true)) { pdfBmp = null; pageCount = 0; textContent = extractDocxText(f) } else { pdfBmp = null; pageCount = 0; textContent = runCatching { f.readText() }.getOrDefault("") } }; Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0E1A)).padding(12.dp)) { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("مكتبتي والقارئ", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold); Button(onClick = { picker.launch(arrayOf("application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain")) }) { Text("إضافة ملف") } }; Spacer(modifier = Modifier.height(8.dp)); if (selectedFile == null) { androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f)) { androidx.compose.foundation.lazy.items(files) { f -> Row(modifier = Modifier.fillMaxWidth().clickable { selectedFile = f; pageIdx = 0 }.padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(f.name, color = Color.White, modifier = Modifier.weight(1f)); IconButton(onClick = { f.delete(); files = libDir.listFiles()?.toList()?.sortedByDescending { it.lastModified() } ?: emptyList() }) { Icon(Icons.Filled.Delete, contentDescription = "حذف", tint = Color.Red) } } } } } else { val f = selectedFile!!; Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Button(onClick = { selectedFile = null }) { Text("رجوع") }; Button(onClick = { val payload = if (f.name.endsWith(".pdf", true)) "ملف PDF: " + f.name + " (صفحة " + (pageIdx + 1) + " من " + pageCount + ")" else textContent.take(4000); onAskAi(payload) }) { Text("اسأل المساعد عن هذا الكتاب") } }; Spacer(modifier = Modifier.height(8.dp)); if (pdfBmp != null) { Image(bitmap = pdfBmp!!.asImageBitmap(), contentDescription = f.name, modifier = Modifier.weight(1f).fillMaxWidth()); Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Button(onClick = { if (pageIdx > 0) pageIdx-- }, enabled = pageIdx > 0) { Text("الصفحة السابقة") }; Text((pageIdx + 1).toString() + " / " + pageCount.toString(), color = Color.White); Button(onClick = { if (pageIdx < pageCount - 1) pageIdx++ }, enabled = pageIdx < pageCount - 1) { Text("الصفحة التالية") } } } else { androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f)) { item { Text(textContent.ifBlank { "لا يوجد نص" }, color = Color.White) } } } } } }; fun extractDocxText(file: java.io.File): String { return try { val sb = StringBuilder(); ZipInputStream(java.io.FileInputStream(file)).use { zip -> var e = zip.nextEntry; while (e != null) { if (e.name == "word/document.xml") { val p = XmlPullParserFactory.newInstance().newPullParser(); p.setInput(zip, "UTF-8"); var ev = p.eventType; while (ev != XmlPullParser.END_DOCUMENT) { if (ev == XmlPullParser.START_TAG && (p.name == "t" || p.name == "w:t")) sb.append(p.nextText()) else if (ev == XmlPullParser.END_TAG && (p.name == "p" || p.name == "w:p")) sb.append("\n"); ev = p.next() }; break }; e = zip.nextEntry } }; sb.toString() } catch (e: Exception) { e.message ?: "" } }; fun renderPdfPage(file: java.io.File, pageIndex: Int): Pair<Bitmap?, Int> { return try { ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd -> PdfRenderer(pfd).use { r -> val cnt = r.pageCount; if (cnt <= 0) return null to 0; val idx = pageIndex.coerceIn(0, cnt - 1); r.openPage(idx).use { page -> val bmp = Bitmap.createBitmap(page.width * 2, page.height * 2, Bitmap.Config.ARGB_8888); Canvas(bmp).drawColor(android.graphics.Color.WHITE); page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY); bmp to cnt } } } } catch (e: Exception) { null to 0 } }
 
               @SuppressLint("SetJavaScriptEnabled")
               @Composable
@@ -1422,11 +1475,13 @@ jobs:
                                   cacheMode = if (isOnline(ctx)) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
                               }
                               addJavascriptInterface(NativeJsBridge(), "EduTechNativeBridge")
+ addJavascriptInterface(NativeJsBridge(), "AndroidNativeBridge")
                               webViewClient = object : WebViewClient() {
                                   override fun shouldInterceptRequest(
                                       view: WebView,
                                       request: WebResourceRequest
                                   ): WebResourceResponse? {
+                                      if (request.url.path?.startsWith("/api/") == true) return null
                                       return assetLoader.shouldInterceptRequest(request.url)
                                   }
 
@@ -1438,6 +1493,7 @@ jobs:
                                   }
 
                                   override fun onPageFinished(view: WebView?, url: String?) {
+                                      view?.evaluateJavascript("(function(){try{var s=document.getElementById('edutech-hide-offbar');if(!s){s=document.createElement('style');s.id='edutech-hide-offbar';s.textContent='#offBar{display:none!important;}';document.head.appendChild(s);}document.querySelectorAll('#offBar').forEach(function(e){e.style.display='none';});}catch(e){}if(!window.__edutechFetchPatched&&window.AndroidNativeBridge){window.__edutechFetchPatched=true;var orig=window.fetch.bind(window);window.fetch=function(input,init){try{var u=typeof input==='string'?input:(input&&input.url?input.url:'');var m=(init&&init.method?init.method:'GET').toUpperCase();var idx=u.indexOf('/api/');if(idx!==-1&&m==='POST'){var p=u.substring(idx);var b=(init&&init.body)?String(init.body):'{}';var r=JSON.parse(window.AndroidNativeBridge.httpPost(p,b));return Promise.resolve(new Response(r.body||'{}',{status:r.status||200,headers:{'Content-Type':'application/json'}}));}}catch(e){}return orig(input,init);};}})();", null)
                                       super.onPageFinished(view, url)
                                       val email = googleEmailState.value
                                       val name = googleNameState.value
@@ -1493,6 +1549,7 @@ jobs:
               }
 
               inner class NativeJsBridge {
+                  @JavascriptInterface fun httpPost(path: String, body: String): String { return try { val u = if (path.startsWith("http")) path else "https://edutech-mindset.pages.dev" + (if (path.startsWith("/")) path else "/" + path); val c = (java.net.URL(u).openConnection() as HttpURLConnection).apply { requestMethod = "POST"; doOutput = true; connectTimeout = 15000; readTimeout = 30000; setRequestProperty("Content-Type", "application/json"); setRequestProperty("Origin", "https://edutech-mindset.pages.dev"); setRequestProperty("Referer", "https://edutech-mindset.pages.dev/") }; c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }; val code = c.responseCode; val s = if (code in 200..299) c.inputStream else c.errorStream; val txt = s?.bufferedReader()?.use { it.readText() } ?: "{}"; JSONObject().put("status", code).put("body", txt).toString() } catch (e: Exception) { JSONObject().put("status", 500).put("error", e.message ?: "error").toString() } }
                   @JavascriptInterface
                   fun getNativeGoogleUser(): String {
                       val u = dbHelper.getGoogleUser() ?: return "{}"
@@ -1613,23 +1670,23 @@ jobs:
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
           ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -name zipalign | sort -V | tail -n 1)
           "$ZIPALIGN" -v -p 4 app/build/outputs/apk/release/app-release-unsigned.apk app-aligned.apk
-          "$APKSIGNER" sign --ks release.jks --ks-pass pass:EduTech2026! --key-pass pass:EduTech2026! --out EduTech-Mindset-Ultimate-v3.0.apk app-aligned.apk
-          "$APKSIGNER" verify --print-certs EduTech-Mindset-Ultimate-v3.0.apk | tee cert_info.txt
-          APK_SIZE=$(ls -lh EduTech-Mindset-Ultimate-v3.0.apk | awk '{print $5}')
-          APK_BYTES=$(stat -c%s EduTech-Mindset-Ultimate-v3.0.apk)
-          APK_SHA1=$(sha1sum EduTech-Mindset-Ultimate-v3.0.apk | awk '{print $1}')
+          "$APKSIGNER" sign --ks release.jks --ks-pass pass:EduTech2026! --key-pass pass:EduTech2026! --out EduTech-Mindset-Pro-v4.0.apk app-aligned.apk
+          "$APKSIGNER" verify --print-certs EduTech-Mindset-Pro-v4.0.apk | tee cert_info.txt
+          APK_SIZE=$(ls -lh EduTech-Mindset-Pro-v4.0.apk | awk '{print $5}')
+          APK_BYTES=$(stat -c%s EduTech-Mindset-Pro-v4.0.apk)
+          APK_SHA1=$(sha1sum EduTech-Mindset-Pro-v4.0.apk | awk '{print $1}')
           CERT_SHA1=$(grep -i "SHA-1 digest" cert_info.txt | head -n 1 | awk -F': ' '{print $2}')
           echo "APK_SIZE=$APK_SIZE ($APK_BYTES bytes)" | tee -a "$GITHUB_ENV"
           echo "APK_SHA1=$APK_SHA1" | tee -a "$GITHUB_ENV"
           echo "CERT_SHA1=$CERT_SHA1" | tee -a "$GITHUB_ENV"
 
-      - name: Create Release v3.0.0
+      - name: Create Release v4.0.0
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.0.0
-          name: EduTech Mindset Ultimate v3.0.0
+          tag_name: v4.0.0
+          name: EduTech Mindset Ultimate v4.0.0
           body: |
-            الإصدار الشامل v3.0.0 من تطبيق EduTech Mindset (Kotlin + Jetpack Compose)
+            الإصدار الشامل v4.0.0 من تطبيق EduTech Mindset (Kotlin + Jetpack Compose)
             - تضمين منصة EduTech Mindset الكاملة (42 أداة) عبر WebViewAssetLoader للعمل أونلاين وأوفلاين
             - شاشة موشن جرافيك فاخرة بالشعار الرسمي وحلقات ثلاثية الأبعاد وترحيب صوتي عربي
             - تسجيل الدخول بحساب Google، الكاميرا، الصور، الميكروفون (SpeechRecognizer)، الإشعارات، والمساعد الذكي العائم مع قاعدة بيانات SQLite محلية
@@ -1637,4 +1694,4 @@ jobs:
             **حجم الملف:** ${{ env.APK_SIZE }}
             **بصمة SHA-1 للملف:** ${{ env.APK_SHA1 }}
             **بصمة SHA-1 لشهادة التوقيع:** ${{ env.CERT_SHA1 }}
-          files: EduTech-Mindset-Ultimate-v3.0.apk
+          files: EduTech-Mindset-Pro-v4.0.apk
