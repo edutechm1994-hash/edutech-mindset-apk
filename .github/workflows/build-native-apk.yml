@@ -1,0 +1,1015 @@
+name: Build Native Android APK v2.0.0
+on: [push, workflow_dispatch]
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and Release Native APK
+        run: |
+          set -e
+cat << 'RAW_EOF' | sed 's/__OB__/{/g; s/__CB__/}/g' > build_all.sh
+#!/usr/bin/env bash
+set -e
+if [ -n "$JAVA_HOME_17_X64" ]; then export JAVA_HOME="$JAVA_HOME_17_X64"; fi
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
+
+curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
+unzip -q /tmp/gradle.zip -d /tmp
+export PATH="/tmp/gradle-8.7/bin:$PATH"
+gradle -v
+
+rm -rf native_app && mkdir -p native_app/app/src/main/java/dev/pages/edutechmindset
+cd native_app
+
+keytool -genkeypair -v -keystore edutech-release.jks -alias edutech -keyalg RSA -keysize 2048 -validity 10000 -storepass edutech2026 -keypass edutech2026 -dname "CN=Basel Al-Faqawi, OU=EduTech Mindset, O=EduTech Mindset, L=Gaza, S=Palestine, C=PS"
+SHA1=$(keytool -list -v -keystore edutech-release.jks -alias edutech -storepass edutech2026 | grep "SHA1:" | awk '__OB__print $2__CB__')
+echo "Extracted SHA-1: $SHA1"
+
+cat << 'EOF' > gradle.properties
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
+android.nonTransitiveRClass=true
+EOF
+
+cat << 'EOF' > settings.gradle.kts
+pluginManagement __OB__
+  repositories __OB__
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  __CB__
+__CB__
+dependencyResolutionManagement __OB__
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories __OB__
+    google()
+    mavenCentral()
+  __CB__
+__CB__
+rootProject.name = "EduTechMindset"
+include(":app")
+EOF
+
+cat << 'EOF' > build.gradle.kts
+plugins __OB__
+  id("com.android.application") version "8.5.2" apply false
+  id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+__CB__
+EOF
+
+cat << 'EOF' > app/build.gradle.kts
+plugins __OB__
+  id("com.android.application")
+  id("org.jetbrains.kotlin.android")
+__CB__
+android __OB__
+  namespace = "dev.pages.edutechmindset"
+  compileSdk = 34
+  defaultConfig __OB__
+    applicationId = "dev.pages.edutechmindset"
+    minSdk = 24
+    targetSdk = 34
+    versionCode = 2
+    versionName = "2.0.0"
+  __CB__
+  signingConfigs __OB__
+    create("release") __OB__
+      storeFile = file("../edutech-release.jks")
+      storePassword = "edutech2026"
+      keyAlias = "edutech"
+      keyPassword = "edutech2026"
+    __CB__
+  __CB__
+  buildTypes __OB__
+    release __OB__
+      isMinifyEnabled = false
+      signingConfig = signingConfigs.getByName("release")
+    __CB__
+  __CB__
+  compileOptions __OB__
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  __CB__
+  kotlinOptions __OB__
+    jvmTarget = "17"
+  __CB__
+  buildFeatures __OB__
+    compose = true
+  __CB__
+  composeOptions __OB__
+    kotlinCompilerExtensionVersion = "1.5.14"
+  __CB__
+__CB__
+dependencies __OB__
+  implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+  implementation("androidx.core:core-ktx:1.13.1")
+  implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+  implementation("androidx.activity:activity-compose:1.9.1")
+  implementation("androidx.compose.ui:ui")
+  implementation("androidx.compose.ui:ui-graphics")
+  implementation("androidx.compose.material3:material3")
+  implementation("androidx.compose.material:material-icons-extended")
+  implementation("com.google.android.gms:play-services-auth:21.2.0")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+__CB__
+EOF
+
+printf '<?xml version="1.0" encoding="utf-8"?>\n' > app/src/main/AndroidManifest.xml
+cat << 'EOF' >> app/src/main/AndroidManifest.xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <application
+    android:allowBackup="true"
+    android:label="EduTech Mindset"
+    android:supportsRtl="true"
+    android:theme="@android:style/Theme.Material.Light.NoActionBar"
+    android:usesCleartextTraffic="true">
+    <activity
+      android:name=".MainActivity"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+    <service
+      android:name=".FloatingBubbleService"
+      android:exported="false" />
+  </application>
+</manifest>
+EOF
+
+cat << 'EOF' > app/src/main/java/dev/pages/edutechmindset/EduTechDatabase.kt
+package dev.pages.edutechmindset
+
+import android.content.ContentValues
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+data class CurriculumItem(val id: Int, val grade: String, val subject: String, val title: String, val summary: String)
+data class QuizQuestion(val id: Int, val subject: String, val question: String, val options: List<String>, val correctIndex: Int)
+data class BagNote(val id: Int, val title: String, val content: String, val createdAt: String)
+
+class EduTechDatabase(context: Context) : SQLiteOpenHelper(context, "edutech_mindset.db", null, 1) __OB__
+  override fun onCreate(db: SQLiteDatabase) __OB__
+    db.execSQL("CREATE TABLE curriculum_summaries (id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT, subject TEXT, title TEXT, summary TEXT)")
+    db.execSQL("CREATE TABLE question_bank (id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT, question TEXT, opt_a TEXT, opt_b TEXT, opt_c TEXT, opt_d TEXT, correct_idx INTEGER)")
+    db.execSQL("CREATE TABLE my_bag_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT, created_at TEXT)")
+
+    val summaries = listOf(
+      arrayOf("التوجيهي - العلمي", "الفيزياء", "الزخم الخطي والدفع", "الزخم الخطي p = m*v كمية متجهة محفوظة في التصادمات المعزولة، والدفع I = F*dt يساوي التغير في الزخم."),
+      arrayOf("التوجيهي - العلمي", "الرياضيات", "التفاضل والتكامل", "معدل التغير اللحظي يمثل المشتقة الأولى، والتكامل المحدود يحسب المساحة تحت المنحنى."),
+      arrayOf("التوجيهي - الأدبي والعلمي", "اللغة العربية", "البلاغة والعروض", "أسلوب القصر يفيد التخصيص والتوكيد، والبحر الوافر تفعيلته مفاعلتن."),
+      arrayOf("التوجيهي - العلمي", "الكيمياء", "الاتزان الكيميائي والحموض", "ثابت التأين Ka يحدد قوة الحمض الضعيف، والرقم الهيدروجيني pH = -log[H3O+]."),
+      arrayOf("المنهاج الفلسطيني", "التكنولوجيا", "قواعد البيانات والشبكات", "المفتاح الأساسي يميز كل سجل في الجدول بشكل فريد، وبروتوكول TCP يضمن موثوقية نقل البيانات.")
+    )
+    summaries.forEach __OB__ s ->
+      val cv = ContentValues().apply __OB__
+        put("grade", s[0]); put("subject", s[1]); put("title", s[2]); put("summary", s[3])
+      __CB__
+      db.insert("curriculum_summaries", null, cv)
+    __CB__
+
+    val questions = listOf(
+      arrayOf("الفيزياء - توجيهي", "ما وحدة قياس الزخم الخطي في النظام الدولي؟", "kg.m/s", "N/m", "J.s", "kg/m2", "0"),
+      arrayOf("الرياضيات - توجيهي", "ما مشتقة الاقتران f(x) = x^3 + 2x؟", "3x^2 + 2", "x^2 + 2", "3x + 2", "6x", "0"),
+      arrayOf("الكيمياء - توجيهي", "ما قيمة pH لمحلول متعادل عند 25 درجة مئوية؟", "1", "5", "7", "14", "2"),
+      arrayOf("التكنولوجيا", "أي لغة تُستخدم للاستعلام في قواعد البيانات العلائقية؟", "HTML", "SQL", "CSS", "XML", "1")
+    )
+    questions.forEach __OB__ q ->
+      val cv = ContentValues().apply __OB__
+        put("subject", q[0]); put("question", q[1])
+        put("opt_a", q[2]); put("opt_b", q[3]); put("opt_c", q[4]); put("opt_d", q[5])
+        put("correct_idx", q[6].toInt())
+      __CB__
+      db.insert("question_bank", null, cv)
+    __CB__
+
+    val cvNote = ContentValues().apply __OB__
+      put("title", "خطة مراجعة التوجيهي")
+      put("content", "مراجعة وحدة الزخم الخطي + حل 10 أسئلة من بنك الأسئلة اليوم.")
+      put("created_at", "2026-11-16")
+    __CB__
+    db.insert("my_bag_notes", null, cvNote)
+  __CB__
+
+  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) __OB__
+    db.execSQL("DROP TABLE IF EXISTS curriculum_summaries")
+    db.execSQL("DROP TABLE IF EXISTS question_bank")
+    db.execSQL("DROP TABLE IF EXISTS my_bag_notes")
+    onCreate(db)
+  __CB__
+
+  fun getCurriculumSummaries(): List<CurriculumItem> __OB__
+    val list = mutableListOf<CurriculumItem>()
+    readableDatabase.rawQuery("SELECT id, grade, subject, title, summary FROM curriculum_summaries", null).use __OB__ c ->
+      while (c.moveToNext()) list.add(CurriculumItem(c.getInt(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4)))
+    __CB__
+    return list
+  __CB__
+
+  fun getQuestions(): List<QuizQuestion> __OB__
+    val list = mutableListOf<QuizQuestion>()
+    readableDatabase.rawQuery("SELECT id, subject, question, opt_a, opt_b, opt_c, opt_d, correct_idx FROM question_bank", null).use __OB__ c ->
+      while (c.moveToNext()) list.add(QuizQuestion(c.getInt(0), c.getString(1), c.getString(2), listOf(c.getString(3), c.getString(4), c.getString(5), c.getString(6)), c.getInt(7)))
+    __CB__
+    return list
+  __CB__
+
+  fun getBagNotes(): List<BagNote> __OB__
+    val list = mutableListOf<BagNote>()
+    readableDatabase.rawQuery("SELECT id, title, content, created_at FROM my_bag_notes ORDER BY id DESC", null).use __OB__ c ->
+      while (c.moveToNext()) list.add(BagNote(c.getInt(0), c.getString(1), c.getString(2), c.getString(3)))
+    __CB__
+    return list
+  __CB__
+
+  fun addBagNote(title: String, content: String) __OB__
+    val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+    val cv = ContentValues().apply __OB__ put("title", title); put("content", content); put("created_at", dateStr) __CB__
+    writableDatabase.insert("my_bag_notes", null, cv)
+  __CB__
+
+  fun deleteBagNote(id: Int) __OB__
+    writableDatabase.delete("my_bag_notes", "id=?", arrayOf(id.toString()))
+  __CB__
+__CB__
+EOF
+
+cat << 'EOF' > app/src/main/java/dev/pages/edutechmindset/AiApiClient.kt
+package dev.pages.edutechmindset
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+suspend fun askEduTechAi(prompt: String): String = withContext(Dispatchers.IO) __OB__
+  try __OB__
+    val endpoint = "https://" + "edutech-mindset.pages.dev" + "/api/ai"
+    val url = URL(endpoint)
+    val conn = (url.openConnection() as HttpURLConnection).apply __OB__
+      requestMethod = "POST"
+      connectTimeout = 15000
+      readTimeout = 20000
+      doOutput = true
+      setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+    __CB__
+    val payload = JSONObject().put("prompt", prompt).put("message", prompt).toString()
+    conn.outputStream.use __OB__ it.write(payload.toByteArray(Charsets.UTF_8)) __CB__
+    val code = conn.responseCode
+    val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+    val raw = stream?.bufferedReader(Charsets.UTF_8)?.use __OB__ it.readText() __CB__ ?: ""
+    try __OB__
+      val json = JSONObject(raw)
+      json.optString("reply").ifEmpty __OB__
+        json.optString("answer").ifEmpty __OB__
+          json.optString("response").ifEmpty __OB__
+            json.optString("message").ifEmpty __OB__ raw __CB__
+          __CB__
+        __CB__
+      __CB__
+    __CB__ catch (_: Exception) __OB__
+      raw.ifEmpty __OB__ "تم استلام الرد (HTTP $code)" __CB__
+    __CB__
+  __CB__ catch (e: Exception) __OB__
+    "تعذر الاتصال بواجهة الذكاء الاصطناعي: $__OB__e.localizedMessage ?: "خطأ في الشبكة"__CB__"
+  __CB__
+__CB__
+EOF
+
+cat << 'EOF' > app/src/main/java/dev/pages/edutechmindset/FloatingBubbleService.kt
+package dev.pages.edutechmindset
+
+import android.app.Service
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.os.Build
+import android.os.IBinder
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
+
+class FloatingBubbleService : Service() __OB__
+  private lateinit var windowManager: WindowManager
+  private var bubbleView: View? = null
+
+  override fun onBind(intent: Intent?): IBinder? = null
+
+  override fun onCreate() __OB__
+    super.onCreate()
+    windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+    val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+    else
+      @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+
+    val params = WindowManager.LayoutParams(
+      WindowManager.LayoutParams.WRAP_CONTENT,
+      WindowManager.LayoutParams.WRAP_CONTENT,
+      type,
+      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+      PixelFormat.TRANSLUCENT
+    ).apply __OB__
+      gravity = Gravity.TOP or Gravity.START
+      x = 40
+      y = 220
+    __CB__
+
+    val container = LinearLayout(this).apply __OB__
+      orientation = LinearLayout.HORIZONTAL
+      setPadding(24, 16, 24, 16)
+      setBackgroundColor(Color.parseColor("#1E3A8A"))
+    __CB__
+    val titleBtn = TextView(this).apply __OB__
+      text = "AI المساعد"
+      setTextColor(Color.WHITE)
+      textSize = 14f
+      setPadding(8, 4, 16, 4)
+    __CB__
+    val closeBtn = TextView(this).apply __OB__
+      text = "X"
+      setTextColor(Color.parseColor("#FCA5A5"))
+      textSize = 15f
+      setPadding(12, 4, 8, 4)
+      setOnClickListener __OB__ stopSelf() __CB__
+    __CB__
+    container.addView(titleBtn)
+    container.addView(closeBtn)
+
+    var initX = 0; var initY = 0; var touchX = 0f; var touchY = 0f
+    titleBtn.setOnTouchListener __OB__ _, event ->
+      when (event.action) __OB__
+        MotionEvent.ACTION_DOWN -> __OB__
+          initX = params.x; initY = params.y
+          touchX = event.rawX; touchY = event.rawY
+          true
+        __CB__
+        MotionEvent.ACTION_MOVE -> __OB__
+          params.x = initX + (event.rawX - touchX).toInt()
+          params.y = initY + (event.rawY - touchY).toInt()
+          windowManager.updateViewLayout(container, params)
+          true
+        __CB__
+        MotionEvent.ACTION_UP -> __OB__
+          if (kotlin.math.abs(event.rawX - touchX) < 12 && kotlin.math.abs(event.rawY - touchY) < 12) __OB__
+            val launch = Intent(this, MainActivity::class.java).apply __OB__
+              addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            __CB__
+            startActivity(launch)
+          __CB__
+          true
+        __CB__
+        else -> false
+      __CB__
+    __CB__
+
+    bubbleView = container
+    windowManager.addView(container, params)
+  __CB__
+
+  override fun onDestroy() __OB__
+    super.onDestroy()
+    bubbleView?.let __OB__ windowManager.removeView(it) __CB__
+  __CB__
+__CB__
+EOF
+
+cat << 'EOF' > app/src/main/java/dev/pages/edutechmindset/MainActivity.kt
+package dev.pages.edutechmindset
+
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
+
+class MainActivity : ComponentActivity() __OB__
+  override fun onCreate(savedInstanceState: Bundle?) __OB__
+    super.onCreate(savedInstanceState)
+    setContent __OB__
+      CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) __OB__
+        MaterialTheme(
+          colorScheme = lightColorScheme(
+            primary = Color(0xFF1E3A8A),
+            secondary = Color(0xFF0EA5E9),
+            background = Color(0xFFF8FAFC)
+          )
+        ) __OB__
+          EduTechRootApp()
+        __CB__
+      __CB__
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun EduTechRootApp() __OB__
+  var showSplash by remember __OB__ mutableStateOf(true) __CB__
+  if (showSplash) __OB__
+    AnimatedSplashScreen(onFinish = __OB__ showSplash = false __CB__)
+  __CB__ else __OB__
+    MainFiveScreensFlow()
+  __CB__
+__CB__
+
+@Composable
+fun AnimatedSplashScreen(onFinish: () -> Unit) __OB__
+  val context = LocalContext.current
+  val infinite = rememberInfiniteTransition(label = "splash")
+  val angle by infinite.animateFloat(
+    initialValue = 0f,
+    targetValue = 360f,
+    animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing)),
+    label = "ring"
+  )
+  val pulse by infinite.animateFloat(
+    initialValue = 0.85f,
+    targetValue = 1.15f,
+    animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse),
+    label = "pulse"
+  )
+
+  DisposableEffect(Unit) __OB__
+    var tts: TextToSpeech? = null
+    tts = TextToSpeech(context) __OB__ status ->
+      if (status == TextToSpeech.SUCCESS) __OB__
+        tts?.language = Locale("ar")
+        tts?.speak(
+          "أهلاً وسهلاً بكم في EduTech Mindset عقلية التعليم والتكنولوجيا إدارة الأستاذ باسل الفقعاوي",
+          TextToSpeech.QUEUE_FLUSH,
+          null,
+          "welcome_tts"
+        )
+      __CB__
+    __CB__
+    onDispose __OB__
+      tts?.stop()
+      tts?.shutdown()
+    __CB__
+  __CB__
+
+  LaunchedEffect(Unit) __OB__
+    delay(4800)
+    onFinish()
+  __CB__
+
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF0284C7)))),
+    contentAlignment = Alignment.Center
+  ) __OB__
+    Canvas(modifier = Modifier.fillMaxSize()) __OB__
+      val cx = size.width / 2f
+      val cy = size.height * 0.42f
+      rotate(angle, Offset(cx, cy)) __OB__
+        drawCircle(color = Color(0x5538BDF8), radius = 150.dp.toPx(), center = Offset(cx, cy), style = Stroke(4.dp.toPx()))
+      __CB__
+      rotate(-angle * 1.4f, Offset(cx, cy)) __OB__
+        drawCircle(color = Color(0x88FBBF24), radius = 110.dp.toPx(), center = Offset(cx, cy), style = Stroke(3.dp.toPx()))
+      __CB__
+      for (i in 0 until 12) __OB__
+        val rad = Math.toRadians((angle + i * 30).toDouble())
+        val px = cx + (175.dp.toPx() * cos(rad)).toFloat()
+        val py = cy + (175.dp.toPx() * sin(rad)).toFloat()
+        drawCircle(color = Color(0xAAFFFFFF), radius = (4f * pulse).dp.toPx(), center = Offset(px, py))
+      __CB__
+    __CB__
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) __OB__
+      Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) __OB__
+        Icon(Icons.Default.AutoStories, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(36.dp))
+        Icon(Icons.Default.School, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(64.dp))
+        Icon(Icons.Default.Psychology, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(36.dp))
+      __CB__
+      Spacer(Modifier.height(24.dp))
+      Text("EduTech Mindset", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+      Spacer(Modifier.height(8.dp))
+      Text("عقلية التعليم والتكنولوجيا", color = Color(0xFFBAE6FD), fontSize = 18.sp, fontWeight = FontWeight.Medium)
+      Spacer(Modifier.height(6.dp))
+      Text("إدارة الأستاذ باسل الفقعاوي", color = Color(0xFFFDE68A), fontSize = 15.sp)
+      Spacer(Modifier.height(32.dp))
+      OutlinedButton(onClick = onFinish, colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) __OB__
+        Text("دخول الآن")
+      __CB__
+    __CB__
+  __CB__
+__CB__
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainFiveScreensFlow() __OB__
+  val context = LocalContext.current
+  val db = remember __OB__ EduTechDatabase(context) __CB__
+  var currentStep by remember __OB__ mutableIntStateOf(0) __CB__
+  val titles = listOf("الرئيسية", "المساعد الذكي", "المناهج وبنك الأسئلة", "حقيبتي", "الأذونات والحساب")
+
+  Scaffold(
+    topBar = __OB__
+      TopAppBar(
+        title = __OB__ Text("$__OB__titles[currentStep]__CB__ ($__OB__currentStep + 1__CB__/5)", fontWeight = FontWeight.Bold) __CB__,
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A), titleContentColor = Color.White)
+      )
+    __CB__,
+    bottomBar = __OB__
+      Surface(tonalElevation = 6.dp, shadowElevation = 8.dp) __OB__
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) __OB__
+          OutlinedButton(onClick = __OB__ if (currentStep > 0) currentStep-- __CB__, enabled = currentStep > 0) __OB__
+            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("السابق")
+          __CB__
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) __OB__
+            repeat(5) __OB__ idx ->
+              Box(
+                modifier = Modifier
+                  .size(if (idx == currentStep) 12.dp else 8.dp)
+                  .clip(CircleShape)
+                  .background(if (idx == currentStep) Color(0xFF1E3A8A) else Color(0xFFCBD5E1))
+                  .clickable __OB__ currentStep = idx __CB__
+              )
+            __CB__
+          __CB__
+          Button(onClick = __OB__ if (currentStep < 4) currentStep++ __CB__, enabled = currentStep < 4) __OB__
+            Text("التالي")
+            Spacer(Modifier.width(6.dp))
+            Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+          __CB__
+        __CB__
+      __CB__
+    __CB__
+  ) __OB__ padding ->
+    AnimatedContent(
+      targetState = currentStep,
+      modifier = Modifier.fillMaxSize().padding(padding),
+      transitionSpec = __OB__
+        (slideInHorizontally __OB__ if (targetState > initialState) it else -it __CB__ + fadeIn())
+          .togetherWith(slideOutHorizontally __OB__ if (targetState > initialState) -it else it __CB__ + fadeOut())
+      __CB__,
+      label = "screen_transition"
+    ) __OB__ step ->
+      when (step) __OB__
+        0 -> HomeScreen(db)
+        1 -> AiAssistantScreen()
+        2 -> CurriculumQuizScreen(db)
+        3 -> MyBagScreen(db)
+        4 -> PermissionsAccountScreen()
+      __CB__
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun HomeScreen(db: EduTechDatabase) __OB__
+  var secondsLeft by remember __OB__ mutableIntStateOf(25 * 60) __CB__
+  var running by remember __OB__ mutableStateOf(false) __CB__
+
+  LaunchedEffect(running) __OB__
+    while (running && secondsLeft > 0) __OB__
+      delay(1000)
+      secondsLeft--
+    __CB__
+    if (secondsLeft == 0) running = false
+  __CB__
+
+  val mins = secondsLeft / 60
+  val secs = secondsLeft % 60
+  val summariesCount = remember __OB__ db.getCurriculumSummaries().size __CB__
+  val questionsCount = remember __OB__ db.getQuestions().size __CB__
+  val notesCount = remember __OB__ db.getBagNotes().size __CB__
+
+  Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) __OB__
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E3A8A))) __OB__
+      Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) __OB__
+        Text("أهلاً بك في EduTech Mindset", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text("منصة التعليم الذكي للتوجيهي والمنهاج الفلسطيني", color = Color(0xFFBAE6FD), fontSize = 14.sp)
+      __CB__
+    __CB__
+
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) __OB__
+      Column(modifier = Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) __OB__
+        Row(verticalAlignment = Alignment.CenterVertically) __OB__
+          Icon(Icons.Default.Timer, contentDescription = null, tint = Color(0xFF1E3A8A))
+          Spacer(Modifier.width(8.dp))
+          Text("مؤقت التركيز (بومودورو)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        __CB__
+        Spacer(Modifier.height(12.dp))
+        Text(String.format(Locale.US, "%02d:%02d", mins, secs), fontSize = 44.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF0EA5E9))
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) __OB__
+          Button(onClick = __OB__ running = !running __CB__) __OB__
+            Icon(if (running) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text(if (running) "إيقاف" else "بدء التركيز")
+          __CB__
+          OutlinedButton(onClick = __OB__ running = false; secondsLeft = 25 * 60 __CB__) __OB__
+            Icon(Icons.Default.Refresh, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text("إعادة")
+          __CB__
+        __CB__
+      __CB__
+    __CB__
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) __OB__
+      StatCard("الملخصات", "$summariesCount", Modifier.weight(1f))
+      StatCard("بنك الأسئلة", "$questionsCount", Modifier.weight(1f))
+      StatCard("حقيبتي", "$notesCount", Modifier.weight(1f))
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun StatCard(label: String, count: String, modifier: Modifier) __OB__
+  Card(modifier = modifier) __OB__
+    Column(modifier = Modifier.padding(14.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) __OB__
+      Text(count, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+      Text(label, fontSize = 13.sp, color = Color.Gray)
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun AiAssistantScreen() __OB__
+  val scope = rememberCoroutineScope()
+  var query by remember __OB__ mutableStateOf("") __CB__
+  var reply by remember __OB__ mutableStateOf("مرحباً! أنا مساعد EduTech الذكي المتصل بواجهة edutech-mindset.pages.dev/api/ai. اسألني أي سؤال في المنهاج الفلسطيني أو التوجيهي.") __CB__
+  var loading by remember __OB__ mutableStateOf(false) __CB__
+  var capturedPhoto by remember __OB__ mutableStateOf<Bitmap?>(null) __CB__
+
+  val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) __OB__ bmp ->
+    if (bmp != null) __OB__
+      capturedPhoto = bmp
+      query = "حلل هذه المسألة أو الصورة التعليمية واشرحها لي"
+    __CB__
+  __CB__
+  val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) __OB__ res ->
+    if (res.resultCode == Activity.RESULT_OK) __OB__
+      val spoken = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+      if (!spoken.isNullOrBlank()) query = spoken
+    __CB__
+  __CB__
+
+  Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) __OB__
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) __OB__
+      Button(onClick = __OB__ cameraLauncher.launch(null) __CB__, modifier = Modifier.weight(1f)) __OB__
+        Icon(Icons.Default.CameraAlt, contentDescription = null)
+        Spacer(Modifier.width(6.dp))
+        Text("الكاميرا")
+      __CB__
+      Button(onClick = __OB__
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply __OB__
+          putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+          putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-PS")
+        __CB__
+        try __OB__ voiceLauncher.launch(intent) __CB__ catch (_: Exception) __OB__ __CB__
+      __CB__, modifier = Modifier.weight(1f)) __OB__
+        Icon(Icons.Default.Mic, contentDescription = null)
+        Spacer(Modifier.width(6.dp))
+        Text("صوت")
+      __CB__
+    __CB__
+
+    capturedPhoto?.let __OB__ bmp ->
+      Image(bitmap = bmp.asImageBitmap(), contentDescription = "صورة السؤال", modifier = Modifier.fillMaxWidth().height(130.dp).clip(RoundedCornerShape(12.dp)))
+    __CB__
+
+    OutlinedTextField(
+      value = query,
+      onValueChange = __OB__ query = it __CB__,
+      label = __OB__ Text("اكتب سؤالك للمساعد الذكي...") __CB__,
+      modifier = Modifier.fillMaxWidth(),
+      minLines = 2
+    )
+
+    Button(
+      onClick = __OB__
+        if (query.isNotBlank() && !loading) __OB__
+          loading = true
+          scope.launch __OB__
+            reply = askEduTechAi(query)
+            loading = false
+          __CB__
+        __CB__
+      __CB__,
+      modifier = Modifier.fillMaxWidth()
+    ) __OB__
+      Icon(Icons.Default.Send, contentDescription = null)
+      Spacer(Modifier.width(8.dp))
+      Text(if (loading) "جاري الاتصال بالمساعد الذكي..." else "إرسال إلى /api/ai")
+    __CB__
+
+    Card(modifier = Modifier.fillMaxWidth().weight(1f)) __OB__
+      Column(modifier = Modifier.padding(14.dp).verticalScroll(rememberScrollState())) __OB__
+        Text("رد المساعد الذكي:", fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+        Spacer(Modifier.height(6.dp))
+        Text(reply, fontSize = 15.sp)
+      __CB__
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun CurriculumQuizScreen(db: EduTechDatabase) __OB__
+  var tab by remember __OB__ mutableIntStateOf(0) __CB__
+  val summaries = remember __OB__ db.getCurriculumSummaries() __CB__
+  val questions = remember __OB__ db.getQuestions() __CB__
+  val selectedAnswers = remember __OB__ mutableStateMapOf<Int, Int>() __CB__
+
+  Column(modifier = Modifier.fillMaxSize().padding(16.dp)) __OB__
+    TabRow(selectedTabIndex = tab) __OB__
+      Tab(selected = tab == 0, onClick = __OB__ tab = 0 __CB__, text = __OB__ Text("ملخصات المنهاج") __CB__)
+      Tab(selected = tab == 1, onClick = __OB__ tab = 1 __CB__, text = __OB__ Text("بنك الأسئلة") __CB__)
+    __CB__
+    Spacer(Modifier.height(12.dp))
+    if (tab == 0) __OB__
+      LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) __OB__
+        items(summaries) __OB__ item ->
+          Card(modifier = Modifier.fillMaxWidth()) __OB__
+            Column(modifier = Modifier.padding(14.dp)) __OB__
+              Text("$__OB__item.grade__CB__ • $__OB__item.subject__CB__", fontSize = 12.sp, color = Color(0xFF0284C7), fontWeight = FontWeight.Bold)
+              Text(item.title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+              Spacer(Modifier.height(4.dp))
+              Text(item.summary, fontSize = 14.sp)
+            __CB__
+          __CB__
+        __CB__
+      __CB__
+    __CB__ else __OB__
+      LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) __OB__
+        items(questions) __OB__ q ->
+          val chosen = selectedAnswers[q.id]
+          Card(modifier = Modifier.fillMaxWidth()) __OB__
+            Column(modifier = Modifier.padding(14.dp)) __OB__
+              Text(q.subject, fontSize = 12.sp, color = Color(0xFF0284C7), fontWeight = FontWeight.Bold)
+              Text(q.question, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+              Spacer(Modifier.height(8.dp))
+              q.options.forEachIndexed __OB__ idx, opt ->
+                val bg = when __OB__
+                  chosen == null -> Color.Transparent
+                  idx == q.correctIndex -> Color(0xFFD1FAE5)
+                  idx == chosen -> Color(0xFFFEE2E2)
+                  else -> Color.Transparent
+                __CB__
+                Row(
+                  modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(bg).clickable __OB__ selectedAnswers[q.id] = idx __CB__.padding(8.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) __OB__
+                  RadioButton(selected = chosen == idx, onClick = __OB__ selectedAnswers[q.id] = idx __CB__)
+                  Text(opt, fontSize = 14.sp)
+                __CB__
+              __CB__
+            __CB__
+          __CB__
+        __CB__
+      __CB__
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun MyBagScreen(db: EduTechDatabase) __OB__
+  var notes by remember __OB__ mutableStateOf(db.getBagNotes()) __CB__
+  var title by remember __OB__ mutableStateOf("") __CB__
+  var content by remember __OB__ mutableStateOf("") __CB__
+
+  Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) __OB__
+    OutlinedTextField(value = title, onValueChange = __OB__ title = it __CB__, label = __OB__ Text("عنوان الملاحظة / الدرس") __CB__, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = content, onValueChange = __OB__ content = it __CB__, label = __OB__ Text("محتوى دفتر حقيبتي") __CB__, modifier = Modifier.fillMaxWidth(), minLines = 2)
+    Button(
+      onClick = __OB__
+        if (title.isNotBlank() && content.isNotBlank()) __OB__
+          db.addBagNote(title.trim(), content.trim())
+          notes = db.getBagNotes()
+          title = ""
+          content = ""
+        __CB__
+      __CB__,
+      modifier = Modifier.fillMaxWidth()
+    ) __OB__
+      Icon(Icons.Default.Add, contentDescription = null)
+      Spacer(Modifier.width(6.dp))
+      Text("حفظ في حقيبتي (SQLite)")
+    __CB__
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) __OB__
+      items(notes) __OB__ note ->
+        Card(modifier = Modifier.fillMaxWidth()) __OB__
+          Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) __OB__
+            Column(modifier = Modifier.weight(1f)) __OB__
+              Text(note.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+              Text(note.content, fontSize = 14.sp)
+              Text(note.createdAt, fontSize = 11.sp, color = Color.Gray)
+            __CB__
+            IconButton(onClick = __OB__ db.deleteBagNote(note.id); notes = db.getBagNotes() __CB__) __OB__
+              Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color(0xFFDC2626))
+            __CB__
+          __CB__
+        __CB__
+      __CB__
+    __CB__
+  __CB__
+__CB__
+
+@Composable
+fun PermissionsAccountScreen() __OB__
+  val context = LocalContext.current
+  val gso = remember __OB__ GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().build() __CB__
+  val googleClient = remember __OB__ GoogleSignIn.getClient(context, gso) __CB__
+  var account by remember __OB__ mutableStateOf(GoogleSignIn.getLastSignedInAccount(context)) __CB__
+  var statusMsg by remember __OB__ mutableStateOf("") __CB__
+  var refreshTrigger by remember __OB__ mutableIntStateOf(0) __CB__
+
+  val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) __OB__ res ->
+    val task = GoogleSignIn.getSignedInAccountFromIntent(res.data)
+    try __OB__
+      account = task.getResult(ApiException::class.java)
+      statusMsg = "تم تسجيل الدخول بنجاح"
+    __CB__ catch (e: ApiException) __OB__
+      statusMsg = "رمز حالة Google Sign-In: $__OB__e.statusCode__CB__"
+    __CB__
+  __CB__
+
+  val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) __OB__
+    refreshTrigger++
+  __CB__
+
+  val storagePerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+  val permsList = buildList __OB__
+    add("الكاميرا" to Manifest.permission.CAMERA)
+    add("الميكروفون" to Manifest.permission.RECORD_AUDIO)
+    add("التخزين" to storagePerm)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add("الإشعارات" to Manifest.permission.POST_NOTIFICATIONS)
+  __CB__
+
+  key(refreshTrigger) __OB__
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) __OB__
+      Card(modifier = Modifier.fillMaxWidth()) __OB__
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) __OB__
+          Row(verticalAlignment = Alignment.CenterVertically) __OB__
+            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = Color(0xFF1E3A8A))
+            Spacer(Modifier.width(8.dp))
+            Text("حساب Google الأصلي", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+          __CB__
+          if (account != null) __OB__
+            Text("مرحباً: $__OB__account?.displayName ?: ""__CB__ ($__OB__account?.email ?: ""__CB__)", color = Color(0xFF15803D))
+            OutlinedButton(onClick = __OB__ googleClient.signOut().addOnCompleteListener __OB__ account = null __CB__ __CB__) __OB__
+              Text("تسجيل الخروج")
+            __CB__
+          __CB__ else __OB__
+            Button(onClick = __OB__ signInLauncher.launch(googleClient.signInIntent) __CB__) __OB__
+              Text("تسجيل الدخول بحساب Google")
+            __CB__
+          __CB__
+          if (statusMsg.isNotEmpty()) Text(statusMsg, fontSize = 12.sp, color = Color.Gray)
+        __CB__
+      __CB__
+
+      Card(modifier = Modifier.fillMaxWidth()) __OB__
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) __OB__
+          Row(verticalAlignment = Alignment.CenterVertically) __OB__
+            Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFF1E3A8A))
+            Spacer(Modifier.width(8.dp))
+            Text("إدارة الأذونات والفقاعة العائمة", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+          __CB__
+          permsList.forEach __OB__ (label, perm) ->
+            val granted = ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) __OB__
+              Text("$label: $__OB__if (granted) "ممنوح" else "غير ممنوح"__CB__", color = if (granted) Color(0xFF15803D) else Color(0xFFB91C1C))
+              if (!granted) __OB__
+                TextButton(onClick = __OB__ permLauncher.launch(arrayOf(perm)) __CB__) __OB__ Text("منح") __CB__
+              __CB__
+            __CB__
+          __CB__
+          val overlayGranted = Settings.canDrawOverlays(context)
+          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) __OB__
+            Text("الظهور فوق التطبيقات: $__OB__if (overlayGranted) "ممنوح" else "غير ممنوح"__CB__", color = if (overlayGranted) Color(0xFF15803D) else Color(0xFFB91C1C))
+            if (!overlayGranted) __OB__
+              TextButton(onClick = __OB__
+                context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$__OB__context.packageName__CB__")))
+              __CB__) __OB__ Text("منح") __CB__
+            __CB__
+          __CB__
+          Button(onClick = __OB__ permLauncher.launch(permsList.map __OB__ it.second __CB__.toTypedArray()) __CB__, modifier = Modifier.fillMaxWidth()) __OB__
+            Text("منح جميع أذونات التطبيق دفعة واحدة")
+          __CB__
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) __OB__
+            Button(
+              onClick = __OB__
+                if (Settings.canDrawOverlays(context)) __OB__
+                  context.startService(Intent(context, FloatingBubbleService::class.java))
+                __CB__ else __OB__
+                  context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$__OB__context.packageName__CB__")))
+                __CB__
+              __CB__,
+              modifier = Modifier.weight(1f)
+            ) __OB__ Text("تشغيل الفقاعة العائمة") __CB__
+            OutlinedButton(
+              onClick = __OB__ context.stopService(Intent(context, FloatingBubbleService::class.java)) __CB__,
+              modifier = Modifier.weight(1f)
+            ) __OB__ Text("إيقاف الفقاعة") __CB__
+          __CB__
+        __CB__
+      __CB__
+    __CB__
+  __CB__
+__CB__
+EOF
+
+gradle assembleRelease --no-daemon
+cp app/build/outputs/apk/release/app-release.apk ../EduTech-Mindset-Native-v2.0.apk
+cd ..
+
+cat << EOF > release_notes.md
+# EduTech Mindset Native v2.0.0
+
+تطبيق أندرويد أصلي مبني بلغة **Kotlin** و **Jetpack Compose** (`dev.pages.edutechmindset`).
+
+### بصمة التوقيع SHA-1 (لإعداد Google Sign-In):
+\`$SHA1\`
+
+### المزايا المضمنة:
+- شاشة افتتاحية بموشن جرافيك على Compose Canvas مع ترحيب صوتي عربي عبر TextToSpeech.
+- تسجيل دخول أصلي بحساب Google عبر GoogleSignIn.
+- قاعدة بيانات SQLite محلية (ملخصات المنهاج الفلسطيني والتوجيهي، بنك الأسئلة التفاعلي، ودفتر حقيبتي).
+- اتصال ذكي بواجهة \`edutech-mindset.pages.dev/api/ai\`.
+- خدمة الفقاعة العائمة للمساعد الذكي فوق جميع التطبيقات (\`SYSTEM_ALERT_WINDOW\`) مع شاشة إدارة الأذونات.
+- خمس شاشات سلسة بالحركات والانتقالات مع أزرار السابق والتالي.
+EOF
+
+export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+gh release delete v2.0.0 --yes 2>/dev/null || true
+gh release create v2.0.0 EduTech-Mindset-Native-v2.0.apk --title "EduTech Mindset Native v2.0.0" --notes-file release_notes.md
+RAW_EOF
+bash build_all.sh
