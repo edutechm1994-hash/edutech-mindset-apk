@@ -36,18 +36,18 @@ jobs:
       - name: Accept Android SDK Licenses and Setup SDK 34
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
+            $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Download EduTech Mindset Platform Files and Official Logo
         run: |
           mkdir -p app/src/main/assets/www/css app/src/main/assets/www/js app/src/main/assets/www/assets
           mkdir -p app/src/main/res/drawable app/src/main/res/mipmap-xxxhdpi app/src/main/res/values app/src/main/res/xml
-         if [ -f "EduTech_Mindset_Cloudflare_Pages_153.zip" ]; then
-echo "Extracting EduTech_Mindset_Cloudflare_Pages_153.zip..."
-unzip -o EduTech_Mindset_Cloudflare_Pages_153.zip -d app/src/main/assets/www
-if [ ! -f "app/src/main/assets/www/index.html" ]; then SUB=$(find app/src/main/assets/www -maxdepth 2 -name "index.html" -print -quit); if [ -n "$SUB" ]; then cp -r "$(dirname "$SUB")"/* app/src/main/assets/www/; fi; fi
-fi
- node -e '
+           if [ -f "EduTech_Mindset_Cloudflare_Pages_153.zip" ]; then
+            echo "Extracting EduTech_Mindset_Cloudflare_Pages_153.zip..."
+            unzip -o EduTech_Mindset_Cloudflare_Pages_153.zip -d app/src/main/assets/www
+            if [ ! -f "app/src/main/assets/www/index.html" ]; then SUB=$(find app/src/main/assets/www -maxdepth 2 -name "index.html" -print -quit); if [ -n "$SUB" ]; then cp -r "$(dirname "$SUB")"/* app/src/main/assets/www/; fi; fi
+          fi
+           node -e '
           const fs = require("fs");
           const path = require("path");
           const https = require("https");
