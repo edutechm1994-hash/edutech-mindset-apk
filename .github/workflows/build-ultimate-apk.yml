@@ -70,7 +70,7 @@ jobs:
           }
 
           async function downloadRel(rel) {
-if (fs.existsSync("EduTech_Mindset_Cloudflare_Pages_153.zip")) return false;
+            if (fs.existsSync("EduTech_Mindset_Cloudflare_Pages_153.zip")) return false;
             const clean = rel.replace(/^\/+/, "").split("?")[0].split("#")[0];
             if (!clean || clean.startsWith("http") || clean.includes("..")) return false;
             const dest = path.join(WWW, clean);
