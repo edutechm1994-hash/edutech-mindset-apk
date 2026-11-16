@@ -1007,7 +1007,7 @@ jobs:
           - خمس شاشات سلسة بالحركات والانتقالات مع أزرار السابق والتالي.
           EOF
 
-                  RAW_EOF
+RAW_EOF
           bash build_all.sh
       - name: Release APK
         env:
