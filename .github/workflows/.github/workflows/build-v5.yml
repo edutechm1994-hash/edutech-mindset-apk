@@ -1,0 +1,31 @@
+name: Build EduTech Mindset v5.0 (APK & Play AAB)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Android v5.0 Project
+        run: unzip -o EduTech_Mindset_Android_v5.0_PlayReady.zip -d android_build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Run Tests & Build APK + AAB
+        working-directory: android_build
+        run: gradle testDebugUnitTest assembleRelease bundleRelease
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: edutech-mindset-v5-play-release
+          path: |
+            android_build/app/build/outputs/apk/release/*.apk
+            android_build/app/build/outputs/bundle/release/*.aab
